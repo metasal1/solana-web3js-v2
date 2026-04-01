@@ -1,0 +1,27 @@
+---
+title: Nonce
+description: Durable nonce accounts for offline and delayed transactions on Solana
+---
+
+## Durable Nonce Accounts
+
+Normally, Solana transactions require a recent blockhash that expires after about 60-90 seconds. Durable nonces solve this by replacing the recent blockhash with a stored nonce value that never expires until it is used.
+
+### Why Use Durable Nonces?
+
+- **Offline signing** - Sign transactions on an air-gapped machine without worrying about blockhash expiration
+- **Multi-party signing** - Collect signatures from multiple parties over time
+- **Scheduled transactions** - Prepare transactions now and submit them later
+- **Custodial workflows** - Queue transactions that require approval steps before submission
+
+### How It Works
+
+1. Create a nonce account that stores a nonce value on-chain
+2. Use that nonce value instead of a recent blockhash when building your transaction
+3. When the transaction is submitted, the nonce value is automatically advanced so it can't be reused
+
+### Operations
+
+- [Create Nonce Account](/docs/nonce/create-nonce-account) - Create a new durable nonce account
+- [Get Nonce Account](/docs/nonce/get-nonce-account) - Fetch and read nonce account data
+- [Use Nonce Account](/docs/nonce/use-nonce-account) - Send a transaction using a durable nonce

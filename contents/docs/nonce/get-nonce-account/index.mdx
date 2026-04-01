@@ -1,0 +1,69 @@
+---
+title: Get Nonce Account
+description: Fetch and read a durable nonce account on Solana
+---
+
+```tsx
+import {
+  createSolanaRpc,
+  address,
+} from "@solana/kit";
+
+const rpc = createSolanaRpc(`http://localhost:8899`);
+
+const getNonceAccount = async () => {
+
+    const nonceAccountAddress = address("NONCE_ACCOUNT_ADDRESS");
+
+    const nonceAccount = await rpc.getAccountInfo(nonceAccountAddress, {
+        encoding: "jsonParsed",
+    }).send();
+
+    if (!nonceAccount.value) {
+        console.log("Nonce account not found");
+        return;
+    }
+
+    const parsed = nonceAccount.value.data as any;
+    console.log("Nonce Account Info:");
+    console.log("  Authority:", parsed.parsed.info.authority);
+    console.log("  Blockhash:", parsed.parsed.info.blockhash);
+    console.log("  Fee Calculator:", parsed.parsed.info.feeCalculator);
+
+};
+
+getNonceAccount();
+
+```
+
+## Old Way
+
+```tsx
+import {
+  clusterApiUrl,
+  Connection,
+  PublicKey,
+  NONCE_ACCOUNT_LENGTH,
+  NonceAccount,
+} from "@solana/web3.js";
+
+(async () => {
+  const connection = new Connection(clusterApiUrl("devnet"), "confirmed");
+
+  const nonceAccountPubkey = new PublicKey("NONCE_ACCOUNT_ADDRESS");
+
+  const accountInfo = await connection.getAccountInfo(nonceAccountPubkey);
+
+  if (!accountInfo) {
+    console.log("Nonce account not found");
+    return;
+  }
+
+  const nonceAccount = NonceAccount.fromAccountData(accountInfo.data);
+  console.log("Nonce Account Info:");
+  console.log("  Authority:", nonceAccount.authorizedPubkey.toBase58());
+  console.log("  Nonce:", nonceAccount.nonce);
+  console.log("  Fee Calculator:", nonceAccount.feeCalculator);
+})();
+
+```
