@@ -1,0 +1,148 @@
+---
+title: Use Nonce Account
+description: Use a durable nonce for offline and delayed transactions
+---
+
+```tsx
+import {
+  createSolanaRpc,
+  createSolanaRpcSubscriptions,
+  createTransactionMessage,
+  pipe,
+  setTransactionMessageFeePayerSigner,
+  appendTransactionMessageInstructions,
+  signTransactionMessageWithSigners,
+  sendAndConfirmTransactionFactory,
+  getSignatureFromTransaction,
+  createKeyPairSignerFromBytes,
+  address,
+  lamports,
+  setTransactionMessageLifetimeUsingDurableNonce,
+} from "@solana/kit";
+import { getAdvanceNonceAccountInstruction, getTransferSolInstruction } from "@solana-program/system";
+import wallet from '../wallet.json';
+
+const rpc = createSolanaRpc(`http://localhost:8899`);
+const rpcSubscriptions = createSolanaRpcSubscriptions(`ws://localhost:8900`);
+
+const sendAndConfirmTransaction = sendAndConfirmTransactionFactory({ rpc, rpcSubscriptions });
+
+const useNonceAccount = async () => {
+
+    const keypairSigner = await createKeyPairSignerFromBytes(new Uint8Array(wallet));
+
+    const nonceAccountAddress = address("NONCE_ACCOUNT_ADDRESS");
+    const destination = address("DESTINATION_ADDRESS");
+
+    // Fetch the nonce account to get the current nonce value
+    const nonceAccount = await rpc.getAccountInfo(nonceAccountAddress, {
+        encoding: "jsonParsed",
+    }).send();
+
+    if (!nonceAccount.value) {
+        throw new Error("Nonce account not found");
+    }
+
+    const parsed = nonceAccount.value.data as any;
+    const currentNonce = parsed.parsed.info.blockhash;
+
+    const transaction = pipe(
+        createTransactionMessage({ version: 0 }),
+        m => setTransactionMessageFeePayerSigner(keypairSigner, m),
+        m => setTransactionMessageLifetimeUsingDurableNonce({
+            nonce: currentNonce,
+            nonceAccountAddress,
+            nonceAuthority: keypairSigner,
+        }, m),
+        m => appendTransactionMessageInstructions(
+            [
+                getTransferSolInstruction({
+                    source: keypairSigner,
+                    destination,
+                    amount: lamports(1_000_000n),
+                }),
+            ],
+            m,
+        ),
+    );
+
+    const signedTransaction = await signTransactionMessageWithSigners(transaction);
+
+    try {
+        await sendAndConfirmTransaction(signedTransaction, {
+            commitment: 'processed',
+            skipPreflight: true,
+        });
+        const signature = getSignatureFromTransaction(signedTransaction);
+        console.log(`Transaction sent with durable nonce. Signature: ${signature}`);
+    } catch (error) {
+        console.error('Transaction failed:', error);
+        throw error;
+    }
+
+};
+
+useNonceAccount();
+
+```
+
+## Old Way
+
+```tsx
+import {
+  clusterApiUrl,
+  Connection,
+  Keypair,
+  LAMPORTS_PER_SOL,
+  NonceAccount,
+  PublicKey,
+  SystemProgram,
+  Transaction,
+  sendAndConfirmTransaction,
+} from "@solana/web3.js";
+import walletSecret from '../wallet.json';
+
+(async () => {
+  const wallet = Keypair.fromSecretKey(new Uint8Array(walletSecret));
+  const connection = new Connection(clusterApiUrl("devnet"), "confirmed");
+
+  const nonceAccountPubkey = new PublicKey("NONCE_ACCOUNT_ADDRESS");
+  const destination = new PublicKey("DESTINATION_ADDRESS");
+
+  // Fetch the nonce account info
+  const accountInfo = await connection.getAccountInfo(nonceAccountPubkey);
+
+  if (!accountInfo) {
+    throw new Error("Nonce account not found");
+  }
+
+  const nonceAccount = NonceAccount.fromAccountData(accountInfo.data);
+
+  const transaction = new Transaction();
+  transaction.recentBlockhash = nonceAccount.nonce;
+  transaction.feePayer = wallet.publicKey;
+
+  // Must include advance nonce instruction as the first instruction
+  transaction.add(
+    SystemProgram.nonceAdvance({
+      noncePubkey: nonceAccountPubkey,
+      authorizedPubkey: wallet.publicKey,
+    })
+  );
+
+  transaction.add(
+    SystemProgram.transfer({
+      fromPubkey: wallet.publicKey,
+      toPubkey: destination,
+      lamports: LAMPORTS_PER_SOL * 0.001,
+    })
+  );
+
+  const txId = await sendAndConfirmTransaction(connection, transaction, [
+    wallet,
+  ]);
+
+  console.log(`Transaction sent with durable nonce. Tx Id: ${txId}`);
+})();
+
+```

@@ -1,0 +1,129 @@
+---
+title: Create Nonce Account
+description: Create a durable nonce account on Solana
+---
+
+```tsx
+import {
+  createSolanaRpc,
+  createSolanaRpcSubscriptions,
+  createTransactionMessage,
+  pipe,
+  setTransactionMessageFeePayerSigner,
+  setTransactionMessageLifetimeUsingBlockhash,
+  appendTransactionMessageInstructions,
+  signTransactionMessageWithSigners,
+  sendAndConfirmTransactionFactory,
+  getSignatureFromTransaction,
+  createKeyPairSignerFromBytes,
+  generateKeyPairSigner,
+  lamports,
+} from "@solana/kit";
+import {
+  getCreateAccountInstruction,
+} from "@solana-program/system";
+import { getInitializeNonceAccountInstruction } from "@solana-program/system";
+import wallet from '../wallet.json';
+
+const rpc = createSolanaRpc(`http://localhost:8899`);
+const rpcSubscriptions = createSolanaRpcSubscriptions(`ws://localhost:8900`);
+
+const sendAndConfirmTransaction = sendAndConfirmTransactionFactory({ rpc, rpcSubscriptions });
+
+const createNonceAccount = async () => {
+
+    const keypairSigner = await createKeyPairSignerFromBytes(new Uint8Array(wallet));
+
+    const nonceKeypair = await generateKeyPairSigner();
+
+    const nonceRent = await rpc.getMinimumBalanceForRentExemption(80n).send();
+
+    const { value: latestBlockhash } = await rpc.getLatestBlockhash().send();
+
+    const transaction = pipe(
+        createTransactionMessage({ version: 0 }),
+        m => setTransactionMessageFeePayerSigner(keypairSigner, m),
+        m => setTransactionMessageLifetimeUsingBlockhash(latestBlockhash, m),
+        m => appendTransactionMessageInstructions(
+            [
+                getCreateAccountInstruction({
+                    payer: keypairSigner,
+                    newAccount: nonceKeypair,
+                    lamports: lamports(nonceRent),
+                    space: 80,
+                    programAddress: "11111111111111111111111111111111" as any,
+                }),
+                getInitializeNonceAccountInstruction({
+                    nonceAccount: nonceKeypair.address,
+                    nonceAuthority: keypairSigner.address,
+                }),
+            ],
+            m,
+        ),
+    );
+
+    const signedTransaction = await signTransactionMessageWithSigners(transaction);
+
+    try {
+        await sendAndConfirmTransaction(signedTransaction, {
+            commitment: 'processed',
+            skipPreflight: true,
+        });
+        const signature = getSignatureFromTransaction(signedTransaction);
+        console.log(`Nonce account created: ${nonceKeypair.address}`);
+        console.log(`Signature: ${signature}`);
+    } catch (error) {
+        console.error('Transaction failed:', error);
+        throw error;
+    }
+
+};
+
+createNonceAccount();
+
+```
+
+## Old Way
+
+```tsx
+import {
+  clusterApiUrl,
+  Connection,
+  Keypair,
+  LAMPORTS_PER_SOL,
+  NONCE_ACCOUNT_LENGTH,
+  SystemProgram,
+  Transaction,
+  sendAndConfirmTransaction,
+} from "@solana/web3.js";
+import walletSecret from '../wallet.json';
+
+(async () => {
+  const wallet = Keypair.fromSecretKey(new Uint8Array(walletSecret));
+  const connection = new Connection(clusterApiUrl("devnet"), "confirmed");
+
+  const nonceAccount = Keypair.generate();
+
+  const minimumRent = await connection.getMinimumBalanceForRentExemption(
+    NONCE_ACCOUNT_LENGTH
+  );
+
+  const transaction = new Transaction().add(
+    SystemProgram.createNonceAccount({
+      fromPubkey: wallet.publicKey,
+      noncePubkey: nonceAccount.publicKey,
+      authorizedPubkey: wallet.publicKey,
+      lamports: minimumRent,
+    })
+  );
+
+  const txId = await sendAndConfirmTransaction(connection, transaction, [
+    wallet,
+    nonceAccount,
+  ]);
+
+  console.log(`Nonce account created: ${nonceAccount.publicKey.toBase58()}`);
+  console.log(`Tx Id: ${txId}`);
+})();
+
+```
