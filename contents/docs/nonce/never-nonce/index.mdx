@@ -1,0 +1,56 @@
+---
+title: Never Nonce
+description: Prevent the use of durable nonces in a transaction using pinocchio-never-nonce
+---
+
+## Pinocchio Never Nonce
+
+The [`pinocchio-never-nonce`](https://github.com/febo/pinocchio-never-nonce) crate provides a simple way to prevent the use of durable nonces in a transaction. This is useful when you want to ensure that a program instruction is never executed as part of a durable nonce transaction.
+
+### Why Prevent Durable Nonces?
+
+Durable nonce transactions can be held indefinitely before submission. In some cases, you may want to guarantee that a transaction is submitted promptly with a recent blockhash — for example:
+
+- **Time-sensitive operations** — where delayed execution could be exploited
+- **Oracle-dependent programs** — where stale data could lead to incorrect results
+- **Security-critical instructions** — where transaction replay or delayed submission poses risks
+
+### Installation
+
+```bash
+cargo add p-never-nonce
+```
+
+### Usage
+
+Add a call to `ensure_never_nonce` in your program's instruction handler. It checks that the first instruction in the transaction is **not** an advance nonce instruction:
+
+```rust
+use p_never_nonce::ensure_never_nonce;
+use pinocchio::{
+    ProgramResult,
+    entrypoint::{InstructionContext, MaybeAccount},
+    error::ProgramError,
+    lazy_program_entrypoint, no_allocator, nostd_panic_handler,
+};
+
+no_allocator!();
+nostd_panic_handler!();
+lazy_program_entrypoint!(process_instruction);
+
+pub fn process_instruction(mut context: InstructionContext) -> ProgramResult {
+    let MaybeAccount::Account(instructions_sysvar) = context.next_account()? else {
+        return Err(ProgramError::NotEnoughAccountKeys);
+    };
+    // Fails if the first instruction is an advance nonce.
+    ensure_never_nonce(&instructions_sysvar, ProgramError::InvalidArgument)
+}
+```
+
+The program requires the **Instructions sysvar** (`Sysvar1nstructions1111111111111111111111111`) to be passed as an account so it can inspect the transaction's instruction list.
+
+### Links
+
+- [GitHub Repository](https://github.com/febo/pinocchio-never-nonce)
+- [crates.io](https://crates.io/crates/p-never-nonce)
+- [License: Apache 2.0](https://github.com/febo/pinocchio-never-nonce/blob/main/LICENSE)

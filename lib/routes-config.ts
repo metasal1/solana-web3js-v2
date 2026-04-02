@@ -102,6 +102,7 @@ export const ROUTES: EachRoute[] = [
       { title: "Create Nonce Account", href: "/create-nonce-account" },
       { title: "Get Nonce Account", href: "/get-nonce-account" },
       { title: "Use Nonce Account", href: "/use-nonce-account" },
+      { title: "Never Nonce", href: "/never-nonce" },
     ],
   },
   {
